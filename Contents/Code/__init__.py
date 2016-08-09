@@ -77,6 +77,20 @@ def MainMenu():
         title=u'Поиск', prompt=u'Поиск канала'
     ))
 
+    oc.add(DirectoryObject(
+        key=Callback(
+            Search,
+            query=' HD'
+        ),
+        title=u'Каналы HD'
+    ))
+    oc.add(DirectoryObject(
+        key=Callback(
+            Search,
+            query=' 3D'
+        ),
+        title=u'Каналы 3D'
+    ))
     for uri, title in channels.items():
         try:
             vco = GetVideoObject(uri, title)
