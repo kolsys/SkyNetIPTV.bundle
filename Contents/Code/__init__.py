@@ -34,8 +34,9 @@ ART = 'art-default.jpg'
 ICON = 'icon-default.png'
 TITLE = 'SkyNet IPTV'
 
-SKYNET_PLAYLIST = 'http://m3u.sknt.ru/'
+SKYNET_PLAYLIST = 'http://m3u.sknt.ru/cat/'
 UDPXY_RE = Regex('^.+:[0-9]{1,5}$')
+GROUP_RE = Regex('group-title="([^"]+)"')
 
 
 def Start():
@@ -65,9 +66,9 @@ def MainMenu():
 
     Updater(PREFIX+'/update', oc)
 
-    channels = GetChannels()
+    groups = GetGroups()
 
-    if not channels:
+    if not groups:
         return NoContents()
 
     oc.add(InputDirectoryObject(
@@ -91,15 +92,47 @@ def MainMenu():
         ),
         title=u'Каналы 3D'
     ))
-    for uri, title in channels.items():
-        try:
-            vco = GetVideoObject(uri, title)
-            oc.add(vco)
-        except Exception as e:
+
+    for group in groups:
+        oc.add(DirectoryObject(
+            key=Callback(
+                Group,
+                group=group
+            ),
+            title=u'%s' % group
+        ))
+
+    return oc
+
+
+@route(PREFIX + '/group')
+def Group(group):
+    channels = GetChannels()
+
+    if not channels:
+        return NoContents()
+
+    oc = ObjectContainer(
+        title2=u'%s' % group,
+        replace_parent=False,
+    )
+
+    group = group.decode('utf-8')
+
+    for uri, meta in channels.items():
+        if meta['group'].decode('utf-8') == group:
+            Log.Debug(meta)
             try:
-                Log.Warn('Can\'t add video to list: %s', e.status)
-            except:
-                continue
+                vco = GetVideoObject(uri, meta['title'])
+                oc.add(vco)
+            except Exception as e:
+                try:
+                    Log.Warn('Can\'t add video to list: %s', e.status)
+                except:
+                    continue
+    if not len(oc):
+        return NoContents()
+
     return oc
 
 
@@ -147,11 +180,24 @@ def GetPlayUri(uri):
     )
 
 
+def GetGroups():
+    channels = GetChannels()
+    if not channels:
+        return None
+
+    groups = set()
+    for meta in channels.values():
+        groups.add(meta['group'])
+
+    return groups
+
+
 def GetChannels():
     try:
         res = HTTP.Request(SKYNET_PLAYLIST).content.splitlines()
     except:
         return None
+
 
     if not len(res) > 2 or not res[0].startswith('#EXTM3U'):
         return None
@@ -166,7 +212,11 @@ def GetChannels():
             continue
         if line.startswith('#EXTINF:'):
             try:
-                current = line[8:].split(',', 1)[1]
+                meta = line[8:].split(',', 1)
+                current = {
+                    'title': meta[1],
+                    'group': GROUP_RE.search(meta[0]).group(1)
+                }
             except:
                 current = None
         elif current:
@@ -183,9 +233,9 @@ def Search(query, **kwargs):
     found = {}
     query = query.decode('utf-8').lower()
 
-    for uri, title in channels.items():
-        if query in title.decode('utf-8').lower():
-            found[uri] = title
+    for uri, meta in channels.items():
+        if query in meta['title'].decode('utf-8').lower():
+            found[uri] = meta['title']
 
     if not found:
         return NoContents()
